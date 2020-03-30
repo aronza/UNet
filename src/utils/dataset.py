@@ -16,6 +16,7 @@ class BasicDataset(Dataset):
 
         self.ids = [splitext(file)[0][:-3] for file in listdir(imgs_dir) if not file.startswith('.')]
         logging.info(f'Creating dataset with {len(self.ids)} examples')
+        print(self.ids)
 
     def __len__(self):
         return len(self.ids)
