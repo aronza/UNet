@@ -9,8 +9,7 @@ from PIL import Image
 from torchvision import transforms
 
 from unet import UNet
-from utils.data_vis import plot_img_and_mask
-from utils.dataset import BasicDataset
+from dataset.dataset import BasicDataset
 
 
 def predict_img(net,
@@ -130,7 +129,3 @@ if __name__ == "__main__":
             result.save(out_files[i])
 
             logging.info("Mask saved to {}".format(out_files[i]))
-
-        if args.viz:
-            logging.info("Visualizing results for image {}, close to continue ...".format(fn))
-            plot_img_and_mask(img, mask)

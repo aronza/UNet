@@ -10,9 +10,11 @@ import logging
 
 
 class BasicDataset(Dataset):
-    def __init__(self, imgs_dir, masks_dir, scale=1):
+    def __init__(self, imgs_dir, masks_dir, img_prefix, mask_prefix, scale=1):
         self.imgs_dir = imgs_dir
+        self.img_prefix = img_prefix
         self.masks_dir = masks_dir
+        self.mask_prefix = mask_prefix
         self.scale = scale
         assert 0 < scale <= 1, 'Scale must be between 0 and 1'
 
@@ -44,7 +46,7 @@ class BasicDataset(Dataset):
     def __getitem__(self, i):
         idx = self.ids[i]
         mask_file = glob(self.masks_dir + idx + '*')
-        img_file = glob(self.imgs_dir + idx.replace('T1', 'brainmask') + '*')
+        img_file = glob(self.imgs_dir + idx.replace(self.img_prefix, self.mask_prefix) + '*')
 
         assert len(mask_file) == 1, \
             f'Either no mask or multiple masks found for the ID {idx}: {mask_file}'
