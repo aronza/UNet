@@ -6,7 +6,7 @@ import shutil
 import sys
 import uuid
 
-import h5py
+import nibabel as nib
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -75,8 +75,9 @@ def save_network_output(output_path, output, logger=None):
     if logger is not None:
         logger.info(f'Saving network output to: {output_path}...')
     output = output.detach().cpu()[0]
-    with h5py.File(output_path, 'w') as f:
-        f.create_dataset('predictions', data=output, compression='gzip')
+    nib.save(output, output_path)
+    # with h5py.File(output_path, 'w') as f:
+    #     f.create_dataset('predictions', data=output, compression='gzip')
 
 
 loggers = {}
