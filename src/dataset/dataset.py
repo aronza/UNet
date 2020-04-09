@@ -56,6 +56,7 @@ class BasicDataset(Dataset):
             f'Either no image or multiple images found for the ID {img_path}: {img_file}'
         assert len(mask_file) == 1, \
             f'Either no mask or multiple masks found for the ID {mask_path}: {mask_file}'
+
         mask = nib.load(mask_file[0])
         img = nib.load(img_file[0])
 
