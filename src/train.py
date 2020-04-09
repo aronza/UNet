@@ -15,8 +15,8 @@ from torch.utils.tensorboard import SummaryWriter
 from dataset.dataset import BasicDataset
 from torch.utils.data import DataLoader, random_split
 
-dir_img = '/data/h_oguz_lab/larsonke/Raw/Training-Data/T1'
-dir_mask = '/data/h_oguz_lab/larsonke/Raw/Training-Data/Brainmask'
+dir_img = '/data/h_oguz_lab/larsonke/Raw/Training-Data/T1/'
+dir_mask = '/data/h_oguz_lab/larsonke/Raw/Training-Data/WM/'
 dir_checkpoint = 'checkpoints/'
 
 
@@ -30,7 +30,7 @@ def train_net(model: UNet3D,
               save_cp=True,
               img_scale=0.5):
 
-    data_set = BasicDataset(dir_img, dir_mask, 'T1', 'brainmask', img_scale)
+    data_set = BasicDataset(dir_img, dir_mask, 'T1', 'wm', img_scale)
     n_val = int(len(data_set) * val_percent)
     n_train = len(data_set) - n_val
     train, val = random_split(data_set, [n_train, n_val])
@@ -67,8 +67,7 @@ def train_net(model: UNet3D,
                 #     'the images are loaded correctly.'
 
                 imgs = imgs.to(device=device, dtype=torch.float32)
-                mask_type = torch.float32  # if model.n_classes == 1 else torch.long
-                true_masks = true_masks.to(device=device, dtype=mask_type)
+                true_masks = true_masks.to(device=device, dtype=torch.float32)
 
                 masks_pred = model(imgs)
                 loss = loss_fnc(masks_pred, true_masks)

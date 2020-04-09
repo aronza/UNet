@@ -46,18 +46,21 @@ class BasicDataset(Dataset):
 
     def __getitem__(self, i):
         idx = self.ids[i]
-        mask_file = glob(self.masks_dir + idx + '*')
-        img_file = glob(self.imgs_dir + idx.replace(self.img_prefix, self.mask_prefix) + '*')
+        img_path = self.imgs_dir  + idx + '*'
+        mask_path = self.masks_dir + idx.replace(self.img_prefix, self.mask_prefix) + '*'
+        
+        img_file = glob(img_path)
+        mask_file = glob(mask_path)
 
-        assert len(mask_file) == 1, \
-            f'Either no mask or multiple masks found for the ID {idx}: {mask_file}'
         assert len(img_file) == 1, \
-            f'Either no image or multiple images found for the ID {idx}: {img_file}'
+            f'Either no image or multiple images found for the ID {img_path}: {img_file}'
+        assert len(mask_file) == 1, \
+            f'Either no mask or multiple masks found for the ID {mask_path}: {mask_file}'
         mask = nib.load(mask_file[0])
         img = nib.load(img_file[0])
 
-        assert img.size == mask.size, \
-            f'Image and mask {idx} should be the same size, but are {img.size} and {mask.size}'
+        assert img.shape == mask.shape, \
+            f'Image and mask {idx} should be the same size, but are {img.shape} and {mask.shape}'
 
         # img = self.preprocess(img, self.scale)
         # mask = self.preprocess(mask, self.scale)
