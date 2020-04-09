@@ -46,13 +46,14 @@ class BasicDataset(Dataset):
 
     def __getitem__(self, i):
         idx = self.ids[i]
-        mask_file = glob(self.masks_dir + idx + '*')
-        img_file = glob(self.imgs_dir + idx.replace(self.img_prefix, self.mask_prefix) + '*')
+        img_file = glob(self.masks_dir + idx + '*')
+        mask_file = glob(self.imgs_dir + idx.replace(self.img_prefix, self.mask_prefix) + '*')
 
-        assert len(mask_file) == 1, \
-            f'Either no mask or multiple masks found for the ID {idx}: {mask_file}'
         assert len(img_file) == 1, \
             f'Either no image or multiple images found for the ID {idx}: {img_file}'
+        assert len(mask_file) == 1, \
+            f'Either no mask or multiple masks found for the ID {idx.replace(self.img_prefix, self.mask_prefix)}: {mask_file} '
+
         mask = nib.load(mask_file[0])
         img = nib.load(img_file[0])
 
