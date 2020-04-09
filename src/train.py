@@ -10,6 +10,7 @@ from tqdm import tqdm
 
 from eval import validate
 from unet3d.model import UNet3D
+from unet3d.losses import DiceLoss
 
 from torch.utils.tensorboard import SummaryWriter
 from dataset.dataset import BasicDataset
@@ -61,17 +62,14 @@ def train_net(model: UNet3D,
             for batch in train_loader:
                 imgs = batch['image']
                 true_masks = batch['mask']
-                # assert imgs.shape[1] == model.n_channels, \
-                #     f'Network has been defined with {model.n_channels} input channels, ' \
-                #     f'but loaded images have {imgs.shape[1]} channels. Please check that ' \
-                #     'the images are loaded correctly.'
 
                 imgs = imgs.to(device=device, dtype=torch.float32)
                 true_masks = true_masks.to(device=device, dtype=torch.float32)
-
                 masks_pred = model(imgs)
+                
                 loss = loss_fnc(masks_pred, true_masks)
                 epoch_loss += loss.item()
+                
                 writer.add_scalar('Loss/train', loss.item(), global_step)
 
                 pbar.set_postfix(**{'loss (batch)': loss.item()})
@@ -152,7 +150,7 @@ if __name__ == '__main__':
 
     try:
         train_net(model=net,
-                  loss_fnc=nn.CrossEntropyLoss if output_channels > 1 else nn.BCEWithLogitsLoss,
+                  loss_fnc=DiceLoss(),
                   epochs=args.epochs,
                   batch_size=args.batchsize,
                   learning_rate=args.lr,

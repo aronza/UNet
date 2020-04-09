@@ -1,9 +1,5 @@
-matplotlib
-numpy
-Pillow
 torch
 torchvision
 tensorboard
 tqdm
 scikit-image
-scikit-learn

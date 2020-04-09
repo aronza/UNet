@@ -186,6 +186,7 @@ class Encoder(nn.Module):
     def forward(self, x):
         if self.pooling is not None:
             x = self.pooling(x)
+            print("Pooling done")
         x = self.basic_module(x)
         return x
 

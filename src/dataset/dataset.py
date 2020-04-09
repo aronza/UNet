@@ -5,8 +5,7 @@ from glob import glob
 import torch
 from torch.utils.data import Dataset
 import logging
-
-# self.ids = [os.path.splitext(file)[0] for file in os.listdir(dir_img) if not file.startswith('.')]
+import numpy as np
 
 
 class BasicDataset(Dataset):
@@ -25,24 +24,14 @@ class BasicDataset(Dataset):
     def __len__(self):
         return len(self.ids)
 
-    # @classmethod
-    # def preprocess(cls, pil_img, scale):
-    #     w, h = pil_img.size
-    #     newW, newH = int(scale * w), int(scale * h)
-    #     assert newW > 0 and newH > 0, 'Scale is too small'
-    #     pil_img = pil_img.resize((newW, newH))
-    #
-    #     img_nd = np.array(pil_img)
-    #
-    #     if len(img_nd.shape) == 2:
-    #         img_nd = np.expand_dims(img_nd, axis=2)
-    #
-    #     # HWC to CHW
-    #     img_trans = img_nd.transpose((2, 0, 1))
-    #     if img_trans.max() > 1:
-    #         img_trans = img_trans / 255
-    #
-    #     return img_trans
+    @classmethod
+    def preprocess(cls, nib_img):
+        img_nd = nib_img.get_fdata()
+
+        if len(img_nd.shape) == 3:
+            img_nd = np.expand_dims(img_nd, axis=0)
+
+        return img_nd
 
     def __getitem__(self, i):
         idx = self.ids[i]
@@ -63,7 +52,7 @@ class BasicDataset(Dataset):
         assert img.shape == mask.shape, \
             f'Image and mask {idx} should be the same size, but are {img.shape} and {mask.shape}'
 
-        # img = self.preprocess(img, self.scale)
-        # mask = self.preprocess(mask, self.scale)
+        img = self.preprocess(img)
+        mask = self.preprocess(mask)
 
-        return {'image': torch.from_numpy(img.get_fdata()), 'mask': torch.from_numpy(mask.get_fdata())}
+        return {'image': torch.from_numpy(img), 'mask': torch.from_numpy(mask)}
