@@ -1,11 +1,30 @@
-import os
 import logging
+import os
+
 import numpy as np
 import torch
 from skimage import measure
 from skimage.metrics import adapted_rand_error
 
+from .losses import compute_per_channel_dice
 from .utils import plot_segm, convert_to_numpy
+
+
+class DiceCoefficient:
+    """Computes Dice Coefficient.
+    Generalized to multiple channels by computing per-channel Dice Score
+    (as described in https://arxiv.org/pdf/1707.03237.pdf) and theTn simply taking the average.
+    Input is expected to be probabilities instead of logits.
+    This metric is mostly useful when channels contain the same semantic class (e.g. affinities computed with different offsets).
+    DO NOT USE this metric when training with DiceLoss, otherwise the results will be biased towards the loss.
+    """
+
+    def __init__(self, epsilon=1e-6, **kwargs):
+        self.epsilon = epsilon
+
+    def __call__(self, input, target):
+        # Average across channels in order to get the final score
+        return torch.mean(compute_per_channel_dice(input, target, epsilon=self.epsilon))
 
 
 class AdaptedRandError:
