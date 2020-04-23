@@ -33,23 +33,24 @@ from unet3d.metrics import BoundaryAdaptedRandError
 #     return tot / n_val
 
 
-def validate(model, val_loader, device, loss_fnc=nn.BCEWithLogitsLoss, eval_criterion=BoundaryAdaptedRandError()):
+def validate(model, val_loader, loss_fnc=nn.BCEWithLogitsLoss, eval_criterion=BoundaryAdaptedRandError()):
     logging.info('Validating...')
 
     val_losses = RunningAverage()
     val_scores = RunningAverage()
 
     with torch.no_grad():
-        for i, t in enumerate(val_loader):
+        for i, batch in enumerate(val_loader):
             logging.info(f'Validation iteration {i}')
 
-            input, target = _split_training_batch(t, device)
+            img = batch['image']
+            mask = batch['mask']
 
             # forward pass
-            output = model(input)
+            output = model(img)
 
             # compute the loss
-            loss = loss_fnc(output, target)
+            loss = loss_fnc(output, mask)
 
             val_losses.update(loss.item(), _batch_size(input))
 
@@ -58,24 +59,11 @@ def validate(model, val_loader, device, loss_fnc=nn.BCEWithLogitsLoss, eval_crit
             if hasattr(model, 'final_activation') and model.final_activation is not None:
                 output = model.final_activation(output)
 
-            eval_score = eval_criterion(output, target)
+            eval_score = eval_criterion(output, mask)
             val_scores.update(eval_score.item(), _batch_size(input))
 
         logging.info(f'Validation finished. Loss: {val_losses.avg}. Evaluation score: {val_scores.avg}')
         return val_scores.avg
-
-
-def _split_training_batch(t, device):
-    def _move_to_device(input):
-        if isinstance(input, tuple) or isinstance(input, list):
-            return tuple([_move_to_device(x) for x in input])
-        else:
-            return input.to(device)
-
-    t = _move_to_device(t)
-    input, target = t
-
-    return input, target
 
 
 @staticmethod

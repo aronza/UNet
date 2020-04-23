@@ -83,7 +83,7 @@ def train_net(model: UNet3D,
                 pbar.update(img.shape[0])
                 global_step += 1
                 if global_step % (len(data_set) // (10 * batch_size)) == 0:
-                    val_score = validate(model, val_loader, device)
+                    val_score = validate(model, val_loader)
 
                     writer.add_scalar('Validation/test', val_score, global_step)
                     writer.add_images('images', img, global_step)
