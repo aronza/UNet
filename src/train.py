@@ -12,8 +12,8 @@ from tqdm import tqdm
 
 from dataset.dataset import BasicDataset
 from eval import validate
-from unet3d.losses import DiceLoss
-from unet3d.metrics import BoundaryAdaptedRandError
+from unet3d.losses import WeightedCrossEntropyLoss
+from unet3d.metrics import DiceCoefficient
 from unet3d.model import UNet3D
 
 dir_img = '/data/h_oguz_lab/larsonke/Raw/Training-Data/T1/'
@@ -24,8 +24,8 @@ dir_checkpoint = 'checkpoints/'
 @profile
 def train_net(model: UNet3D,
               device,
-              loss_fnc,
-              eval_criterion=BoundaryAdaptedRandError(),
+              loss_fnc=WeightedCrossEntropyLoss(),
+              eval_criterion=DiceCoefficient(),
               epochs=1,
               batch_size=1,
               learning_rate=0.0002,
@@ -83,13 +83,13 @@ def train_net(model: UNet3D,
                 pbar.update(img.shape[0])
                 global_step += 1
                 if global_step % (len(data_set) // (10 * batch_size)) == 0:
-                    val_score = validate(model, val_loader, loss_fnc, eval_criterion)
+                    val_score = validate(model, val_loader, loss_fnc, eval_criterion, device)
 
                     writer.add_scalar('Validation/test', val_score, global_step)
-                    writer.add_images('images', img, global_step)
-                    if model.n_classes == 1:
-                        writer.add_images('masks/true', mask, global_step)
-                        writer.add_images('masks/pred', torch.sigmoid(masks_pred) > 0.5, global_step)
+                    # writer.add_images('masks/pred', torch.sigmoid(masks_pred) > 0.5, global_step)
+                    # writer.add_images('images', img, global_step)
+                    # if model.n_classes == 1:
+                    #     writer.add_images('masks/true', mask, global_step)
 
         if save_cp:
             try:
@@ -152,7 +152,6 @@ if __name__ == '__main__':
 
     try:
         train_net(model=net,
-                  loss_fnc=DiceLoss(),
                   epochs=args.epochs,
                   batch_size=args.batchsize,
                   learning_rate=args.lr,

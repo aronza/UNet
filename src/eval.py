@@ -31,8 +31,8 @@ from unet3d.utils import RunningAverage
 #
 #     return tot / n_val
 
-
-def validate(model, val_loader, loss_fnc, eval_criterion):
+        
+def validate(model, val_loader, loss_fnc, eval_criterion, device):
     logging.info('Validating...')
 
     val_losses = RunningAverage()
@@ -44,6 +44,9 @@ def validate(model, val_loader, loss_fnc, eval_criterion):
 
             img = batch['image']
             mask = batch['mask']
+            
+            img = img.to(device=device, dtype=torch.float32)
+            mask = mask.to(device=device, dtype=torch.float32)
 
             # forward pass
             output = model(img)
@@ -51,7 +54,7 @@ def validate(model, val_loader, loss_fnc, eval_criterion):
             # compute the loss
             loss = loss_fnc(output, mask)
 
-            val_losses.update(loss.item(), _batch_size(input))
+            val_losses.update(loss.item(), img.shape[0])
 
             # if model contains final_activation layer for normalizing logits apply it, otherwise
             # the evaluation metric will be incorrectly computed
@@ -59,15 +62,8 @@ def validate(model, val_loader, loss_fnc, eval_criterion):
                 output = model.final_activation(output)
 
             eval_score = eval_criterion(output, mask)
-            val_scores.update(eval_score.item(), _batch_size(input))
+            val_scores.update(eval_score.item(), img.shape[0])
 
         logging.info(f'Validation finished. Loss: {val_losses.avg}. Evaluation score: {val_scores.avg}')
         return val_scores.avg
 
-
-@staticmethod
-def _batch_size(input):
-    if isinstance(input, list) or isinstance(input, tuple):
-        return input[0].size(0)
-    else:
-        return input.size(0)
