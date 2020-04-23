@@ -1,4 +1,4 @@
-def build_slices(input_shape, patch_shape, stride_shape):
+def build_slices(input_shape, patch_shape=(64, 128, 128), stride_shape=(32, 100, 100)):
     """Iterates over a given n-dim dataset patch-by-patch with a given stride
                     and builds an array of slice positions.
 

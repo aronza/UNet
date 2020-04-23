@@ -21,18 +21,19 @@ dir_img = '/data/h_oguz_lab/larsonke/Raw/Training-Data/T1/'
 dir_mask = '/data/h_oguz_lab/larsonke/Raw/Training-Data/WM/'
 dir_checkpoint = 'checkpoints/'
 
+
 @profile
 def train_net(model: UNet3D,
               device,
               loss_fnc,
-              epochs=5,
+              epochs=1,
               batch_size=1,
               learning_rate=0.0002,
               val_percent=0.1,
               save_cp=True,
               img_scale=0.5):
 
-    data_set = BasicDataset(dir_img, dir_mask, 'T1', 'wm', img_scale)
+    data_set = BasicDataset(dir_img, dir_mask, 'T1')
     n_val = int(len(data_set) * val_percent)
     n_train = len(data_set) - n_val
     train, val = random_split(data_set, [n_train, n_val])
@@ -61,14 +62,14 @@ def train_net(model: UNet3D,
         epoch_loss = 0
         with tqdm(total=n_train, desc=f'Epoch {epoch + 1}/{epochs}', unit='img') as pbar:
             for batch in train_loader:
-                imgs = batch['image']
-                true_masks = batch['mask']
-
-                imgs = imgs.to(device=device, dtype=torch.float32)
-                true_masks = true_masks.to(device=device, dtype=torch.float32)
-                masks_pred = model(imgs)
+                img = batch['image']
+                mask = batch['mask']
                 
-                loss = loss_fnc(masks_pred, true_masks)
+                img = img.to(device=device, dtype=torch.float32)
+                mask = mask.to(device=device, dtype=torch.float32)
+                masks_pred = model(img)
+                
+                loss = loss_fnc(masks_pred, mask)
                 epoch_loss += loss.item()
                 
                 writer.add_scalar('Loss/train', loss.item(), global_step)
@@ -79,15 +80,15 @@ def train_net(model: UNet3D,
                 loss.backward()
                 optimizer.step()
 
-                pbar.update(imgs.shape[0])
+                pbar.update(img.shape[0])
                 global_step += 1
                 if global_step % (len(data_set) // (10 * batch_size)) == 0:
                     val_score = validate(model, val_loader, device)
 
                     writer.add_scalar('Validation/test', val_score, global_step)
-                    writer.add_images('images', imgs, global_step)
+                    writer.add_images('images', img, global_step)
                     if model.n_classes == 1:
-                        writer.add_images('masks/true', true_masks, global_step)
+                        writer.add_images('masks/true', mask, global_step)
                         writer.add_images('masks/pred', torch.sigmoid(masks_pred) > 0.5, global_step)
 
         if save_cp:
@@ -97,7 +98,7 @@ def train_net(model: UNet3D,
             except OSError:
                 pass
             torch.save(model.state_dict(),
-                       dir_checkpoint + f'CP_epoch{epoch + 1}.pth')
+                      dir_checkpoint + f'CP_epoch{epoch + 1}.pth')
             logging.info(f'Checkpoint {epoch + 1} saved !')
 
     writer.close()
@@ -106,7 +107,7 @@ def train_net(model: UNet3D,
 def get_args():
     parser = argparse.ArgumentParser(description='Train the UNet on images and target masks',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-e', '--epochs', metavar='E', type=int, default=5,
+    parser.add_argument('-e', '--epochs', metavar='E', type=int, default=1,
                         help='Number of epochs', dest='epochs')
     parser.add_argument('-b', '--batch-size', metavar='B', type=int, nargs='?', default=1,
                         help='Batch size', dest='batchsize')

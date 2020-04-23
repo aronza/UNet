@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from .slicer import Slicer
+from .slicer import build_slices
 
 
 def get_nii_files(directory, tag):
@@ -30,15 +30,19 @@ class BasicDataset(Dataset):
         self.img_files = [get_nii_files(imgs_dir, tag) for tag in self.tags]
         self.mask_files = [get_nii_files(masks_dir, tag) for tag in self.tags]
 
-        slicer = Slicer(self.img_files, self.mask_files)
-        self.img_slices = slicer.img_slices
-        self.mask_slices = slicer.mask_slices
+        self.slices = build_slices(self.img_files[0].shape)
 
-        assert len(self.img_slices) == self.mask_slices, "Images and Masks must be same shape "
-        logging.info(f'Creating dataset with {len(self.tags)} examples')
+        num_img_files = len(self.img_files)
+        num_mask_files = len(self.mask_files)
+        assert num_img_files == num_mask_files, \
+            "There must be equal number of Images and Masks " + str(num_img_files) + " vs " + str(num_mask_files)
+        
+        
+        logging.info(f'Input shape: {self.img_files[0].shape}')
+        logging.info(f'Creating dataset with {len(self.tags)} examples and {len(self.slices)} slices each')
 
     def __len__(self):
-        return len(self.img_files) * len(self.img_slices)
+        return len(self.img_files) * len(self.slices)
 
     @classmethod
     def pre_process(cls, img_nd):
@@ -49,12 +53,13 @@ class BasicDataset(Dataset):
         return img_nd
 
     def __getitem__(self, idx):
-        file_idx = idx // len(self.img_slices)
-        slice_idx = idx % len(self.img_slices)
-
+        file_idx = idx // len(self.slices)
+        slice_idx = idx % len(self.slices)
+        
+        _slice = self.slices[slice_idx]
         #  Only loads the sliced img to data
-        img = self.img_files[file_idx][slice_idx]
-        mask = self.mask_files[file_idx][slice_idx]
+        img = self.img_files[file_idx][_slice]
+        mask = self.mask_files[file_idx][_slice]
 
         img = self.pre_process(img)
         mask = self.pre_process(mask)
