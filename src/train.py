@@ -15,12 +15,13 @@ from unet3d.losses import DiceLoss
 from torch.utils.tensorboard import SummaryWriter
 from dataset.dataset import BasicDataset
 from torch.utils.data import DataLoader, random_split
+from memory_profiler import profile
 
 dir_img = '/data/h_oguz_lab/larsonke/Raw/Training-Data/T1/'
 dir_mask = '/data/h_oguz_lab/larsonke/Raw/Training-Data/WM/'
 dir_checkpoint = 'checkpoints/'
 
-
+@profile
 def train_net(model: UNet3D,
               device,
               loss_fnc,

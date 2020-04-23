@@ -1,4 +1,5 @@
 from functools import partial
+from memory_profiler import profile
 
 import torch
 from torch import nn as nn
@@ -182,7 +183,7 @@ class Encoder(nn.Module):
                                          order=conv_layer_order,
                                          num_groups=num_groups,
                                          padding=padding)
-
+    @profile
     def forward(self, x):
         if self.pooling is not None:
             x = self.pooling(x)
@@ -233,9 +234,9 @@ class Decoder(nn.Module):
                                          order=conv_layer_order,
                                          num_groups=num_groups,
                                          padding=padding)
-
+    @profile
     def forward(self, encoder_features, x):
-        x = self.upsampling(encoder_features=encoder_features, x=x)
+        x = self.upsampling(encoder_features_size=encoder_features.size(), x=x)
         x = self.joining(encoder_features, x)
         x = self.basic_module(x)
         return x
@@ -279,8 +280,8 @@ class Upsampling(nn.Module):
         else:
             self.upsample = partial(self._interpolate, mode=mode)
 
-    def forward(self, encoder_features, x):
-        output_size = encoder_features.size()[2:]
+    def forward(self, encoder_features_size, x):
+        output_size = encoder_features_size[2:]
         return self.upsample(x, output_size)
 
     @staticmethod
