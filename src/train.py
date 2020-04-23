@@ -4,18 +4,17 @@ import os
 import sys
 
 import torch
-import torch.nn as nn
+from memory_profiler import profile
 from torch import optim
+from torch.utils.data import DataLoader, random_split
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from eval import validate
-from unet3d.model import UNet3D
-from unet3d.losses import DiceLoss
-
-from torch.utils.tensorboard import SummaryWriter
 from dataset.dataset import BasicDataset
-from torch.utils.data import DataLoader, random_split
-from memory_profiler import profile
+from eval import validate
+from unet3d.losses import DiceLoss
+from unet3d.metrics import BoundaryAdaptedRandError
+from unet3d.model import UNet3D
 
 dir_img = '/data/h_oguz_lab/larsonke/Raw/Training-Data/T1/'
 dir_mask = '/data/h_oguz_lab/larsonke/Raw/Training-Data/WM/'
@@ -26,6 +25,7 @@ dir_checkpoint = 'checkpoints/'
 def train_net(model: UNet3D,
               device,
               loss_fnc,
+              eval_criterion=BoundaryAdaptedRandError(),
               epochs=1,
               batch_size=1,
               learning_rate=0.0002,
@@ -83,7 +83,7 @@ def train_net(model: UNet3D,
                 pbar.update(img.shape[0])
                 global_step += 1
                 if global_step % (len(data_set) // (10 * batch_size)) == 0:
-                    val_score = validate(model, val_loader)
+                    val_score = validate(model, val_loader, loss_fnc, eval_criterion)
 
                     writer.add_scalar('Validation/test', val_score, global_step)
                     writer.add_images('images', img, global_step)

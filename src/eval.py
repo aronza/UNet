@@ -1,9 +1,8 @@
-import torch
 import logging
-from torch import nn
+
+import torch
 
 from unet3d.utils import RunningAverage
-from unet3d.metrics import BoundaryAdaptedRandError
 
 
 # def eval_net(net, loader, device, n_val):
@@ -33,7 +32,7 @@ from unet3d.metrics import BoundaryAdaptedRandError
 #     return tot / n_val
 
 
-def validate(model, val_loader, loss_fnc=nn.BCEWithLogitsLoss, eval_criterion=BoundaryAdaptedRandError()):
+def validate(model, val_loader, loss_fnc, eval_criterion):
     logging.info('Validating...')
 
     val_losses = RunningAverage()
