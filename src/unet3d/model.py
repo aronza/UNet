@@ -2,8 +2,6 @@ import torch.nn as nn
 import sys
 import gc
 from .buildingblocks import Encoder, Decoder, DoubleConv
-from memory_profiler import profile
-
 
 class Abstract3DUNet(nn.Module):
     """
@@ -111,18 +109,14 @@ class Abstract3DUNet(nn.Module):
             # regression problem
             self.final_activation = None
     
-    @profile
     def forward(self, x):
         # encoder part
-        # encoders_features = []
-        # for encoder in self.encoders:
-        #     x = encoder(x)
-        #     # reverse the encoder outputs to be aligned with the decoder
-        #     encoders_features.insert(0, x)
-        #     print("encoder done")
-        # print("Encoder step done")
+        encoders_features = []
+        for encoder in self.encoders:
+            x = encoder(x)
+            # reverse the encoder outputs to be aligned with the decoder
+            encoders_features.insert(0, x)
 
-        x, encoders_features = self._encoder_side(x)
         # remove the last encoder's output from the list
         # !!remember: it's the 1st in the list
         encoders_features = encoders_features[1:]
@@ -134,8 +128,6 @@ class Abstract3DUNet(nn.Module):
             x = self.decoders[idx](encoders_features[idx], x)
             encoders_features[idx] = None
             # encoders_features.remove(encoder_features)
-            print("decoder done")
-        print("Decoder step done")
         x = self.final_conv(x)
         # apply final_activation (i.e. Sigmoid or Softmax) only during prediction. During training the network outputs
         # logits and it's up to the user to normalize it before visualising with tensorboard or computing validation metric
@@ -143,17 +135,7 @@ class Abstract3DUNet(nn.Module):
             x = self.final_activation(x)
 
         return x
-        
-    @profile
-    def _encoder_side(self, x):
-        encoders_features = []
-        for encoder in self.encoders:
-            x = encoder(x)
-            # reverse the encoder outputs to be aligned with the decoder
-            encoders_features.insert(0, x)
-            print("encoder done")
-        print("Encoder step done")
-        return x, encoders_features
+
 
 
 class UNet3D(Abstract3DUNet):

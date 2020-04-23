@@ -31,7 +31,7 @@ class BasicDataset(Dataset):
         self.mask_files = [get_nii_files(masks_dir, tag) for tag in self.tags]
 
         self.slices = build_slices(self.img_files[0].shape)
-
+        
         num_img_files = len(self.img_files)
         num_mask_files = len(self.mask_files)
         assert num_img_files == num_mask_files, \
@@ -42,7 +42,9 @@ class BasicDataset(Dataset):
         logging.info(f'Creating dataset with {len(self.tags)} examples and {len(self.slices)} slices each')
 
     def __len__(self):
-        return len(self.img_files) * len(self.slices)
+        return 1 * len(self.slices)
+
+        # return len(self.img_files) * len(self.slices)
 
     @classmethod
     def pre_process(cls, img_nd):
