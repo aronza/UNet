@@ -1,58 +1,62 @@
-from os.path import splitext
-from os import listdir
-import nibabel as nib
+import logging
 from glob import glob
+from os import listdir
+
+import nibabel as nib
+import numpy as np
 import torch
 from torch.utils.data import Dataset
-import logging
-import numpy as np
+
+from .slicer import Slicer
+
+
+def get_nii_files(directory, tag):
+    path = directory + tag + '*'
+    # mask_path = self.masks_dir + tag.replace(self.img_prefix, self.mask_prefix) + '*'
+
+    file = glob(path)
+
+    assert len(file) == 1, \
+        f'Either no file or multiple files found for the ID {directory}: {file}'
+
+    img = nib.load(file[0])
+
+    return img.dataobj
 
 
 class BasicDataset(Dataset):
-    def __init__(self, imgs_dir, masks_dir, img_prefix, mask_prefix, scale=1):
-        self.imgs_dir = imgs_dir
-        self.img_prefix = img_prefix
-        self.masks_dir = masks_dir
-        self.mask_prefix = mask_prefix
-        self.scale = scale
-        assert 0 < scale <= 1, 'Scale must be between 0 and 1'
+    def __init__(self, imgs_dir, masks_dir, img_postfix):
+        self.tags = [file[:file.index(img_postfix)] for file in listdir(imgs_dir) if not file.startswith('.')]
+        self.img_files = [get_nii_files(imgs_dir, tag) for tag in self.tags]
+        self.mask_files = [get_nii_files(masks_dir, tag) for tag in self.tags]
 
-        self.ids = [file for file in listdir(imgs_dir) if not file.startswith('.')]
-        logging.info(f'Creating dataset with {len(self.ids)} examples')
-        print(self.ids)
+        slicer = Slicer(self.img_files, self.mask_files)
+        self.img_slices = slicer.img_slices
+        self.mask_slices = slicer.mask_slices
+
+        assert len(self.img_slices) == self.mask_slices, "Images and Masks must be same shape "
+        logging.info(f'Creating dataset with {len(self.tags)} examples')
 
     def __len__(self):
-        return len(self.ids)
+        return len(self.img_files) * len(self.img_slices)
 
     @classmethod
-    def preprocess(cls, nib_img):
-        img_nd = nib_img.get_fdata()
+    def pre_process(cls, img_nd):
 
         if len(img_nd.shape) == 3:
             img_nd = np.expand_dims(img_nd, axis=0)
 
         return img_nd
 
-    def __getitem__(self, i):
-        idx = self.ids[i]
-        img_path = self.imgs_dir  + idx + '*'
-        mask_path = self.masks_dir + idx.replace(self.img_prefix, self.mask_prefix) + '*'
-        
-        img_file = glob(img_path)
-        mask_file = glob(mask_path)
+    def __getitem__(self, idx):
+        file_idx = idx // len(self.img_slices)
+        slice_idx = idx % len(self.img_slices)
 
-        assert len(img_file) == 1, \
-            f'Either no image or multiple images found for the ID {img_path}: {img_file}'
-        assert len(mask_file) == 1, \
-            f'Either no mask or multiple masks found for the ID {mask_path}: {mask_file}'
+        #  Only loads the sliced img to data
+        img = self.img_files[file_idx][slice_idx]
+        mask = self.mask_files[file_idx][slice_idx]
 
-        mask = nib.load(mask_file[0])
-        img = nib.load(img_file[0])
-
-        assert img.shape == mask.shape, \
-            f'Image and mask {idx} should be the same size, but are {img.shape} and {mask.shape}'
-
-        img = self.preprocess(img)
-        mask = self.preprocess(mask)
+        img = self.pre_process(img)
+        mask = self.pre_process(mask)
 
         return {'image': torch.from_numpy(img), 'mask': torch.from_numpy(mask)}
