@@ -2,17 +2,18 @@ import argparse
 import logging
 import os
 import sys
+import numpy as np
 
 import torch
-from memory_profiler import profile
 from torch import optim
+from torch.nn import BCEWithLogitsLoss
 from torch.utils.data import DataLoader, random_split
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from dataset.dataset import BasicDataset
 from eval import validate
-from unet3d.losses import WeightedCrossEntropyLoss
+from unet3d.losses import BCEDiceLoss
 from unet3d.metrics import DiceCoefficient
 from unet3d.model import UNet3D
 
@@ -21,10 +22,9 @@ dir_mask = '/data/h_oguz_lab/larsonke/Raw/Training-Data/WM/'
 dir_checkpoint = 'checkpoints/'
 
 
-@profile
 def train_net(model: UNet3D,
               device,
-              loss_fnc=WeightedCrossEntropyLoss(),
+              loss_fnc=BCEDiceLoss(1, 1),
               eval_criterion=DiceCoefficient(),
               epochs=1,
               batch_size=1,
@@ -66,26 +66,29 @@ def train_net(model: UNet3D,
                 mask = batch['mask']
                 
                 img = img.to(device=device, dtype=torch.float32)
-                mask = mask.to(device=device, dtype=torch.float32)
+                mask = mask.to(device=device, dtype=torch.torch.float32)
                 masks_pred = model(img)
                 
                 loss = loss_fnc(masks_pred, mask)
+                
                 epoch_loss += loss.item()
                 
+                print('Loss: ', loss.item(), " Mean: ", np.mean(img.numpy()), " Std: ", np.std(img.numpy()))
                 writer.add_scalar('Loss/train', loss.item(), global_step)
-
-                pbar.set_postfix(**{'loss (batch)': loss.item()})
 
                 optimizer.zero_grad()
                 loss.backward()
+                
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 0.25)
+
                 optimizer.step()
 
                 pbar.update(img.shape[0])
                 global_step += 1
-                if global_step % (len(data_set) // (10 * batch_size)) == 0:
-                    val_score = validate(model, val_loader, loss_fnc, eval_criterion, device)
+                # if global_step % (len(data_set) // (10 * batch_size)) == 0:
+                #     val_score = validate(model, val_loader, loss_fnc, eval_criterion, device)
 
-                    writer.add_scalar('Validation/test', val_score, global_step)
+                #     writer.add_scalar('Validation/test', val_score, global_step)
                     # writer.add_images('masks/pred', torch.sigmoid(masks_pred) > 0.5, global_step)
                     # writer.add_images('images', img, global_step)
                     # if model.n_classes == 1:

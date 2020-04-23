@@ -33,7 +33,7 @@ from unet3d.utils import RunningAverage
 
         
 def validate(model, val_loader, loss_fnc, eval_criterion, device):
-    logging.info('Validating...')
+    logging.info('\nValidating...')
 
     val_losses = RunningAverage()
     val_scores = RunningAverage()
@@ -61,6 +61,8 @@ def validate(model, val_loader, loss_fnc, eval_criterion, device):
             if hasattr(model, 'final_activation') and model.final_activation is not None:
                 output = model.final_activation(output)
 
+            
+            # output = (output > 0.5).float()
             eval_score = eval_criterion(output, mask)
             val_scores.update(eval_score.item(), img.shape[0])
 

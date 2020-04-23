@@ -18,7 +18,7 @@ def compute_per_channel_dice(input, target, epsilon=1e-6, weight=None):
     """
 
     # input and target shapes must match
-    assert input.size() == target.size(), "'input' and 'target' must have the same shape"
+    assert input.size() == target.size(), "'input' "+ str(input.size()) +" and 'target' "+ str(target.size()) +" must have the same shape"
 
     input = flatten(input)
     target = flatten(target)
