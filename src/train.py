@@ -2,17 +2,15 @@ import argparse
 import logging
 import os
 import sys
-import numpy as np
 
+import numpy as np
 import torch
 from torch import optim
-from torch.nn import BCEWithLogitsLoss
 from torch.utils.data import DataLoader, random_split
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from dataset.dataset import BasicDataset
-from eval import validate
 from unet3d.losses import BCEDiceLoss
 from unet3d.metrics import DiceCoefficient
 from unet3d.model import UNet3D
@@ -66,7 +64,7 @@ def train_net(model: UNet3D,
                 mask = batch['mask']
                 
                 img = img.to(device=device, dtype=torch.float32)
-                mask = mask.to(device=device, dtype=torch.torch.float32)
+                mask = mask.to(device=device, dtype=torch.float32)
                 masks_pred = model(img)
                 
                 loss = loss_fnc(masks_pred, mask)
