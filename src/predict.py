@@ -8,8 +8,8 @@ import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms
 
-from unet import UNet
 from dataset.dataset import BasicDataset
+from unet import UNet
 
 
 def predict_img(net,
@@ -19,7 +19,7 @@ def predict_img(net,
                 out_threshold=0.5):
     net.eval()
 
-    img = torch.from_numpy(BasicDataset.preprocess(full_img, scale_factor))
+    img = torch.from_numpy(BasicDataset.pre_process(full_img))
 
     img = img.unsqueeze(0)
     img = img.to(device=device, dtype=torch.float32)
