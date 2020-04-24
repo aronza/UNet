@@ -3,13 +3,11 @@ import logging
 import os
 import sys
 
-import numpy as np
 import torch
 from torch import optim
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, random_split
 from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
 
 from dataset.dataset import BasicDataset
 from unet3d.metrics import DiceCoefficient
@@ -32,6 +30,9 @@ def train_net(model: UNet3D,
               img_scale=0.5):
 
     data_set = BasicDataset(dir_img, dir_mask, 'T1')
+
+    data_set.split_to_loaders(0.1, 0.1, batch_size)
+
     n_val = int(len(data_set) * val_percent)
     n_train = len(data_set) - n_val
     train, val = random_split(data_set, [n_train, n_val])
@@ -40,7 +41,7 @@ def train_net(model: UNet3D,
     
     writer = SummaryWriter(comment=f'LR_{learning_rate}_BS_{batch_size}_SCALE_{img_scale}')
     global_step = 0
-
+    # TODO: REPORT WHICH IMAGES ARE SEPARATED FOR TRAINING
     logging.info(f'''Starting training:
         Epochs:          {epochs}
         Batch size:      {batch_size}
@@ -81,6 +82,7 @@ def train_net(model: UNet3D,
             optimizer.step()
 
             global_step += 1
+            # TODO: ADD VALIDATION STEP
                 # if global_step % (len(data_set) // (10 * batch_size)) == 0:
                 #     val_score = validate(model, val_loader, loss_fnc, eval_criterion, device)
 

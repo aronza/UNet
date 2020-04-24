@@ -1,7 +1,7 @@
 import torch.nn as nn
-import sys
-import gc
+
 from .buildingblocks import Encoder, Decoder, DoubleConv
+
 
 class Abstract3DUNet(nn.Module):
     """
@@ -108,7 +108,7 @@ class Abstract3DUNet(nn.Module):
         else:
             # regression problem
             self.final_activation = None
-    
+
     def forward(self, x):
         # encoder part
         encoders_features = []
@@ -122,7 +122,7 @@ class Abstract3DUNet(nn.Module):
         encoders_features = encoders_features[1:]
         # decoder part
         for idx in range(len(self.decoders)):
-        # for decoder, encoder_features in zip(self.decoders, encoders_features):
+            # for decoder, encoder_features in zip(self.decoders, encoders_features):
             # pass the output from the corresponding encoder and the output
             # of the previous decoder
             x = self.decoders[idx](encoders_features[idx], x)
@@ -135,7 +135,6 @@ class Abstract3DUNet(nn.Module):
             x = self.final_activation(x)
 
         return x
-
 
 
 class UNet3D(Abstract3DUNet):

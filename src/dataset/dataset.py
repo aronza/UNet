@@ -1,10 +1,12 @@
 import logging
 from glob import glob
 from os import listdir
+from pprint import pprint
 
 import nibabel as nib
 import numpy as np
 import torch
+from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset
 
 from .slicer import build_slices
@@ -61,10 +63,26 @@ class BasicDataset(Dataset):
         logging.info(f'Input shape: {self.img_files[0].shape}')
         logging.info(f'Creating dataset with {len(self.tags)} examples and {len(self.slices)} slices each')
 
+    def split_to_loaders(self, test_ratio, validation_ratio, batch_size):
+        train_files, test_files = train_test_split(range(len(self.img_files)), test_size=test_ratio)
+        val_train_ratio = validation_ratio / (1 - test_ratio)
+        train_files, validation_files = train_test_split(train_files, test_size=val_train_ratio)
+
+        print("Train:")
+        pprint(train_files)
+        print("Validation:")
+        pprint(validation_files)
+        print("Test:")
+        pprint(test_files)
+        # sizes = [len(self) * ratio for ratio in ratios]
+        #
+        # subsets = random_split(self, sizes)
+        #
+        # return [DataLoader(subset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
+        #         for subset in subsets]
+
     def __len__(self):
         return len(self.img_files) * len(self.slices)
-
-        # return len(self.img_files) * len(self.slices)
 
     def pre_process(self, img_nd, mask_nd):
         
