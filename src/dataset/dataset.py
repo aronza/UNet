@@ -7,7 +7,7 @@ import nibabel as nib
 import numpy as np
 import torch
 from sklearn.model_selection import train_test_split
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Subset, DataLoader
 
 from .slicer import build_slices
 
@@ -43,6 +43,9 @@ def calculate_stats(images):
         [img for img in images]
     )
     return np.mean(flat), np.std(flat), np.count_nonzero(flat), flat.size
+
+def expand_file_indices(files, num_slices):
+    return [range(file_no * num_slices, (file_no + 1) * num_slices) for file_no in files]
     
 
 class BasicDataset(Dataset):
@@ -67,19 +70,12 @@ class BasicDataset(Dataset):
         train_files, test_files = train_test_split(range(len(self.img_files)), test_size=test_ratio)
         val_train_ratio = validation_ratio / (1 - test_ratio)
         train_files, validation_files = train_test_split(train_files, test_size=val_train_ratio)
-
-        print("Train:")
-        pprint(train_files)
-        print("Validation:")
-        pprint(validation_files)
-        print("Test:")
-        pprint(test_files)
-        # sizes = [len(self) * ratio for ratio in ratios]
-        #
-        # subsets = random_split(self, sizes)
-        #
-        # return [DataLoader(subset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
-        #         for subset in subsets]
+        
+        subsets = [expand_file_indices(train_files, len(self.slices)) 
+                    for files in [train_files, validation_files, test_files]]
+        
+        return [DataLoader(Subset(self, subset), batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
+                for subset in subsets]
 
     def __len__(self):
         return len(self.img_files) * len(self.slices)
