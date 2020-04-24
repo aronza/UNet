@@ -40,7 +40,7 @@ def calculate_stats(images):
     flat = np.concatenate(
         [img for img in images]
     )
-    return np.min(flat), np.max(flat), np.mean(flat), np.std(flat)
+    return np.mean(flat), np.std(flat), np.count_nonzero(flat), flat.size
     
 
 class BasicDataset(Dataset):
@@ -49,7 +49,7 @@ class BasicDataset(Dataset):
         self.img_files = [get_nii_files(imgs_dir, tag) for tag in self.tags]
         self.mask_files = [get_nii_files(masks_dir, tag) for tag in self.tags]
         
-        self.min, self.max, self.mean, self.std = calculate_stats(self.img_files)                    
+        self.mean, self.std, zeroes, size = calculate_stats(self.img_files)
 
         self.slices = build_slices(self.img_files[0].shape)
         
@@ -72,7 +72,7 @@ class BasicDataset(Dataset):
 
         if len(img_nd.shape) == 3:
             img_nd = np.expand_dims(img_nd, axis=0)
-            mask_nd = np.expand_dims(mask_nd, axis=0)
+            # mask_nd = np.expand_dims(mask_nd, axis=0)
 
         return img_nd, mask_nd
 

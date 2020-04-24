@@ -6,12 +6,12 @@ import sys
 import numpy as np
 import torch
 from torch import optim
+from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, random_split
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from dataset.dataset import BasicDataset
-from unet3d.losses import BCEDiceLoss
 from unet3d.metrics import DiceCoefficient
 from unet3d.model import UNet3D
 
@@ -22,9 +22,9 @@ dir_checkpoint = 'checkpoints/'
 
 def train_net(model: UNet3D,
               device,
-              loss_fnc=BCEDiceLoss(1, 1),
+              loss_fnc=CrossEntropyLoss(ignore_index=-100),
               eval_criterion=DiceCoefficient(),
-              epochs=1,
+              epochs=5,
               batch_size=1,
               learning_rate=0.0002,
               val_percent=0.1,
@@ -58,31 +58,29 @@ def train_net(model: UNet3D,
         model.train()
 
         epoch_loss = 0
-        with tqdm(total=n_train, desc=f'Epoch {epoch + 1}/{epochs}', unit='img') as pbar:
-            for batch in train_loader:
-                img = batch['image']
-                mask = batch['mask']
+        for batch in train_loader:
+            img = batch['image']
+            mask = batch['mask']
                 
-                img = img.to(device=device, dtype=torch.float32)
-                mask = mask.to(device=device, dtype=torch.float32)
-                masks_pred = model(img)
+            img = img.to(device=device, dtype=torch.float32)
+            mask = mask.to(device=device, dtype=torch.int64)
+            masks_pred = model(img)
                 
-                loss = loss_fnc(masks_pred, mask)
+            loss = loss_fnc(masks_pred, mask)
                 
-                epoch_loss += loss.item()
-                
-                print('Loss: ', loss.item(), " Mean: ", np.mean(img.numpy()), " Std: ", np.std(img.numpy()))
-                writer.add_scalar('Loss/train', loss.item(), global_step)
+            epoch_loss += loss.item()
+            
+            logging.info(f'I: {global_step}, Loss: {loss.item()}')
+            writer.add_scalar('Loss/train', loss.item(), global_step)
 
-                optimizer.zero_grad()
-                loss.backward()
+            optimizer.zero_grad()
+            loss.backward()
                 
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 0.25)
+            #    torch.nn.utils.clip_grad_norm_(model.parameters(), 0.25)
 
-                optimizer.step()
+            optimizer.step()
 
-                pbar.update(img.shape[0])
-                global_step += 1
+            global_step += 1
                 # if global_step % (len(data_set) // (10 * batch_size)) == 0:
                 #     val_score = validate(model, val_loader, loss_fnc, eval_criterion, device)
 
@@ -100,6 +98,7 @@ def train_net(model: UNet3D,
                 pass
             torch.save(model.state_dict(),
                       dir_checkpoint + f'CP_epoch{epoch + 1}.pth')
+            logging.info(f'Epoch: {epoch + 1} Loss: {epoch_loss}')
             logging.info(f'Checkpoint {epoch + 1} saved !')
 
     writer.close()
@@ -108,7 +107,7 @@ def train_net(model: UNet3D,
 def get_args():
     parser = argparse.ArgumentParser(description='Train the UNet on images and target masks',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-e', '--epochs', metavar='E', type=int, default=1,
+    parser.add_argument('-e', '--epochs', metavar='E', type=int, default=5,
                         help='Number of epochs', dest='epochs')
     parser.add_argument('-b', '--batch-size', metavar='B', type=int, nargs='?', default=1,
                         help='Batch size', dest='batchsize')
@@ -137,7 +136,7 @@ if __name__ == '__main__':
     #   - For 2 classes, use n_classes=1
     #   - For N > 2 classes, use n_classes=N
     input_channels = 1
-    output_channels = 1
+    output_channels = 2
     net = UNet3D(in_channels=input_channels, out_channels=output_channels)
     logging.info(f'Network:\n'
                  f'\t{input_channels} input channels\n'
