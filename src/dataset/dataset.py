@@ -95,18 +95,16 @@ class BasicDataset(Dataset):
     def __len__(self):
         return self.length
 
-    def pre_process(self, img_nd, mask_nd):
-        # img_nd = standardize(img_nd, self.mean, self.std)
-
-        img_nd = np.expand_dims(img_nd, axis=0)
+    @classmethod
+    def pre_process(cls, img_nd, is_label, device):
+        if not is_label:
+            img_nd = np.expand_dims(img_nd, axis=0)
 
         img_nd = torch.from_numpy(img_nd)
-        mask_nd = torch.from_numpy(mask_nd)
 
-        img_nd = img_nd.to(device=self.device, dtype=torch.float32)
-        mask_nd = mask_nd.to(device=self.device, dtype=torch.int64)
+        img_nd = img_nd.to(device=device, dtype=torch.int64 if is_label else torch.float32)
 
-        return img_nd, mask_nd
+        return img_nd
 
     def __getitem__(self, idx):
         file_idx = idx // len(self.slices)
@@ -118,6 +116,7 @@ class BasicDataset(Dataset):
         img = self.img_files[file_idx][_slice]
         mask = self.mask_files[file_idx][_slice]
 
-        img, mask = self.pre_process(img, mask)
+        img = self.pre_process(img, is_label=False, device=self.device)
+        mask = self.pre_process(mask, is_label=True, device=self.device)
 
         return {'image': img, 'mask': mask}
