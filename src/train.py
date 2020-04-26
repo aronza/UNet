@@ -2,15 +2,22 @@ import argparse
 import logging
 import os
 import sys
+import timeit
+from datetime import datetime
 
+import matplotlib as mpl
 import torch
 from torch import optim
 from torch.nn import CrossEntropyLoss
-from torch.utils.data import DataLoader, random_split
 from torch.utils.tensorboard import SummaryWriter
 
+mpl.use('Agg')
+
+import matplotlib.pyplot as plt
+
 from dataset.dataset import BasicDataset
-from unet3d.metrics import DiceCoefficient
+from eval import validate
+from unet3d.metrics import MeanIoU
 from unet3d.model import UNet3D
 
 dir_img = '/data/h_oguz_lab/larsonke/Raw/Training-Data/T1/'
@@ -18,88 +25,92 @@ dir_mask = '/data/h_oguz_lab/larsonke/Raw/Training-Data/WM/'
 dir_checkpoint = 'checkpoints/'
 
 
+def plot_cost(costs, name):
+    plt.title(name + " over Gradient Descent Iterations")
+    plt.xlabel("Iterations")
+    plt.ylabel(name)
+    plt.plot(range(len(costs)), costs, color='red')  # cost line
+    plt.savefig('runs/' + str(datetime.now()) + '_' + name + '_overtime.png')
+
+
 def train_net(model: UNet3D,
               device,
               loss_fnc=CrossEntropyLoss(ignore_index=-100),
-              eval_criterion=DiceCoefficient(),
-              epochs=5,
+              eval_criterion=MeanIoU(),
+              epochs=1,
               batch_size=1,
               learning_rate=0.0002,
-              val_percent=0.1,
-              save_cp=True,
-              img_scale=0.5):
+              val_percent=0.04,
+              test_percent=0.1,
+              save_cp=True):
+    data_set = BasicDataset(dir_img, dir_mask, 'T1', device)
+    train_loader, val_loader, test_loader = data_set.split_to_loaders(val_percent, test_percent, batch_size)
 
-    data_set = BasicDataset(dir_img, dir_mask, 'T1')
-
-    data_set.split_to_loaders(0.1, 0.1, batch_size)
-
-    n_val = int(len(data_set) * val_percent)
-    n_train = len(data_set) - n_val
-    train, val = random_split(data_set, [n_train, n_val])
-    train_loader = DataLoader(train, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
-    val_loader = DataLoader(val, batch_size=batch_size, shuffle=False, num_workers=8, pin_memory=True)
-    
-    writer = SummaryWriter(comment=f'LR_{learning_rate}_BS_{batch_size}_SCALE_{img_scale}')
+    writer = SummaryWriter(comment=f'LR_{learning_rate}_BS_{batch_size}')
     global_step = 0
-    # TODO: REPORT WHICH IMAGES ARE SEPARATED FOR TRAINING
     logging.info(f'''Starting training:
         Epochs:          {epochs}
         Batch size:      {batch_size}
         Learning rate:   {learning_rate}
-        Training size:   {n_train}
-        Validation size: {n_val}
+        Training size:   {len(train_loader)}
+        Validation size: {len(val_loader)}
+        Testing size:    {len(test_loader)}
         Checkpoints:     {save_cp}
         Device:          {device.type}
-        Images scaling:  {img_scale}
     ''')
 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.00001)
+    losses = []
+    val_scores = []
 
     for epoch in range(epochs):
-        model.train()
 
         epoch_loss = 0
         for batch in train_loader:
+            model.train()
+            start_time = timeit.default_timer()
+
             img = batch['image']
             mask = batch['mask']
-                
-            img = img.to(device=device, dtype=torch.float32)
-            mask = mask.to(device=device, dtype=torch.int64)
+
             masks_pred = model(img)
-                
+
             loss = loss_fnc(masks_pred, mask)
-                
+
             epoch_loss += loss.item()
-            
-            logging.info(f'I: {global_step}, Loss: {loss.item()}')
+            losses.append(loss.item())
+
             writer.add_scalar('Loss/train', loss.item(), global_step)
 
             optimizer.zero_grad()
             loss.backward()
-                
-            #    torch.nn.utils.clip_grad_norm_(model.parameters(), 0.25)
 
             optimizer.step()
 
             global_step += 1
-            # TODO: ADD VALIDATION STEP
-                # if global_step % (len(data_set) // (10 * batch_size)) == 0:
-                #     val_score = validate(model, val_loader, loss_fnc, eval_criterion, device)
+            elapsed = timeit.default_timer() - start_time
+            logging.info(f'I: {global_step}, Loss: {loss.item()} in {elapsed} seconds')
 
-                #     writer.add_scalar('Validation/test', val_score, global_step)
-                    # writer.add_images('masks/pred', torch.sigmoid(masks_pred) > 0.5, global_step)
-                    # writer.add_images('images', img, global_step)
-                    # if model.n_classes == 1:
-                    #     writer.add_images('masks/true', mask, global_step)
+            if global_step % (len(train_loader) // (5 * batch_size)) == 0:
+                start_time = timeit.default_timer()
+                val_score = validate(model, val_loader, loss_fnc, eval_criterion)
+                elapsed = timeit.default_timer() - start_time
+                val_scores.append(val_score)
+
+                writer.add_scalar('Validation/test', val_score, global_step)
+                logging.info(f'I: {global_step}, Total Validation Score: {val_score} in {elapsed} seconds')
 
         if save_cp:
+            plot_cost(losses, name='Loss' + str(epoch))
+            plot_cost(val_scores, name='Validation' + str(epoch))
+
             try:
                 os.mkdir(dir_checkpoint)
                 logging.info('Created checkpoint directory')
             except OSError:
                 pass
             torch.save(model.state_dict(),
-                      dir_checkpoint + f'CP_epoch{epoch + 1}.pth')
+                       dir_checkpoint + f'CP_epoch{epoch + 1}.pth')
             logging.info(f'Epoch: {epoch + 1} Loss: {epoch_loss}')
             logging.info(f'Checkpoint {epoch + 1} saved !')
 
@@ -109,17 +120,15 @@ def train_net(model: UNet3D,
 def get_args():
     parser = argparse.ArgumentParser(description='Train the UNet on images and target masks',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-e', '--epochs', metavar='E', type=int, default=5,
+    parser.add_argument('-e', '--epochs', metavar='E', type=int, default=1,
                         help='Number of epochs', dest='epochs')
     parser.add_argument('-b', '--batch-size', metavar='B', type=int, nargs='?', default=1,
                         help='Batch size', dest='batchsize')
-    parser.add_argument('-l', '--learning-rate', metavar='LR', type=float, nargs='?', default=0.1,
+    parser.add_argument('-l', '--learning-rate', metavar='LR', type=float, nargs='?', default=0.0002,
                         help='Learning rate', dest='lr')
     parser.add_argument('-f', '--load', dest='load', type=str, default=False,
                         help='Load model from a .pth file')
-    parser.add_argument('-s', '--scale', dest='scale', type=float, default=0.5,
-                        help='Downscaling factor of the images')
-    parser.add_argument('-v', '--validation', dest='val', type=float, default=10.0,
+    parser.add_argument('-v', '--validation', dest='val', type=float, default=4.0,
                         help='Percent of the data that is used as validation (0-100)')
 
     return parser.parse_args()
@@ -158,7 +167,6 @@ if __name__ == '__main__':
                   batch_size=args.batchsize,
                   learning_rate=args.lr,
                   device=device,
-                  img_scale=args.scale,
                   val_percent=args.val / 100)
     except KeyboardInterrupt:
         torch.save(net.state_dict(), 'INTERRUPTED.pth')

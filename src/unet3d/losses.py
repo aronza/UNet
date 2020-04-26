@@ -4,6 +4,8 @@ from torch import nn as nn
 from torch.autograd import Variable
 from torch.nn import MSELoss, SmoothL1Loss, L1Loss
 
+from .utils import expand_as_one_hot
+
 
 def compute_per_channel_dice(input, target, epsilon=1e-6, weight=None):
     """
@@ -18,7 +20,8 @@ def compute_per_channel_dice(input, target, epsilon=1e-6, weight=None):
     """
 
     # input and target shapes must match
-    assert input.size() == target.size(), "'input' "+ str(input.size()) +" and 'target' "+ str(target.size()) +" must have the same shape"
+    assert input.size() == target.size(), "'input' " + str(input.size()) + " and 'target' " + str(
+        target.size()) + " must have the same shape"
 
     input = flatten(input)
     target = flatten(target)
@@ -388,33 +391,3 @@ def _create_loss(name, loss_config, weight, ignore_index, pos_weight):
     else:
         raise RuntimeError(f"Unsupported loss function: '{name}'. Supported losses: {SUPPORTED_LOSSES}")
 
-def expand_as_one_hot(input, C, ignore_index=None):
-    """
-    Converts NxDxHxW label image to NxCxDxHxW, where each label gets converted to its corresponding one-hot vector
-    :param input: 4D input image (NxDxHxW)
-    :param C: number of channels/labels
-    :param ignore_index: ignore index to be kept during the expansion
-    :return: 5D output image (NxCxDxHxW)
-    """
-    assert input.dim() == 4
-
-    # expand the input tensor to Nx1xDxHxW before scattering
-    input = input.unsqueeze(1)
-    # create result tensor shape (NxCxDxHxW)
-    shape = list(input.size())
-    shape[1] = C
-
-    if ignore_index is not None:
-        # create ignore_index mask for the result
-        mask = input.expand(shape) == ignore_index
-        # clone the src tensor and zero out ignore_index in the input
-        input = input.clone()
-        input[input == ignore_index] = 0
-        # scatter to get the one-hot tensor
-        result = torch.zeros(shape).to(input.device).scatter_(1, input, 1)
-        # bring back the ignore_index in the result
-        result[mask] = ignore_index
-        return result
-    else:
-        # scatter to get the one-hot tensor
-        return torch.zeros(shape).to(input.device).scatter_(1, input, 1)

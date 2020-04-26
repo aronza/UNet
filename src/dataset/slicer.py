@@ -1,6 +1,7 @@
 import logging
 
-def build_slices(input_shape, patch_shape=(64, 128, 128), stride_shape=(32, 128, 128)):
+
+def build_slices(input_shape, patch_shape=(170, 256, 64), stride_shape=(170, 256, 32)):
     """Iterates over a given n-dim dataset patch-by-patch with a given stride
                     and builds an array of slice positions.
 
@@ -32,7 +33,7 @@ def build_slices(input_shape, patch_shape=(64, 128, 128), stride_shape=(32, 128,
                     slice_idx = (slice(0, in_channels),) + slice_idx
                 slices.append(slice_idx)
     logging.info(f'Patch shape {patch_shape}')
-    
+
     return slices
 
 
