@@ -21,34 +21,36 @@ from unet3d.metrics import MeanIoU
 from unet3d.model import UNet3D
 
 dir_img = '/data/h_oguz_lab/larsonke/Raw/Training-Data/T1/'
-dir_mask = '/data/h_oguz_lab/larsonke/Raw/Training-Data/WM/'
+dir_mask = '/data/h_oguz_lab/larsonke/Raw/Training-Data/Brainmask/'
 dir_checkpoint = 'checkpoints/'
 
 
-def plot_cost(costs, name):
+def plot_cost(costs, name, model_name):
+    plt.clf()
     plt.title(name + " over Gradient Descent Iterations")
     plt.xlabel("Iterations")
     plt.ylabel(name)
     plt.plot(range(len(costs)), costs, color='red')  # cost line
-    plt.savefig('runs/' + str(datetime.now()) + '_' + name + '_overtime.png')
+    plt.savefig('runs/' + model_name + str(datetime.now()) + '_' + name + '_overtime.png')
 
 
 def train_net(model: UNet3D,
               device,
-              loss_fnc=CrossEntropyLoss(ignore_index=-100),
+              loss_fnc=CrossEntropyLoss(),
               eval_criterion=MeanIoU(),
-              epochs=1,
+              epochs=5,
               batch_size=1,
               learning_rate=0.0002,
-              val_percent=0.04,
+              val_percent=0.01,
               test_percent=0.1,
+              name='U-Net',
               save_cp=True):
     data_set = BasicDataset(dir_img, dir_mask, 'T1', device)
     train_loader, val_loader, test_loader = data_set.split_to_loaders(val_percent, test_percent, batch_size)
 
     writer = SummaryWriter(comment=f'LR_{learning_rate}_BS_{batch_size}')
     global_step = 0
-    logging.info(f'''Starting training:
+    logging.info(f'''Starting {name} training:
         Epochs:          {epochs}
         Batch size:      {batch_size}
         Learning rate:   {learning_rate}
@@ -92,17 +94,14 @@ def train_net(model: UNet3D,
             logging.info(f'I: {global_step}, Loss: {loss.item()} in {elapsed} seconds')
 
             if global_step % (len(train_loader) // (5 * batch_size)) == 0:
-                start_time = timeit.default_timer()
                 val_score = validate(model, val_loader, loss_fnc, eval_criterion)
-                elapsed = timeit.default_timer() - start_time
                 val_scores.append(val_score)
 
                 writer.add_scalar('Validation/test', val_score, global_step)
-                logging.info(f'I: {global_step}, Total Validation Score: {val_score} in {elapsed} seconds')
 
         if save_cp:
-            plot_cost(losses, name='Loss' + str(epoch))
-            plot_cost(val_scores, name='Validation' + str(epoch))
+            plot_cost(losses, name='Loss' + str(epoch), model_name=name)
+            plot_cost(val_scores, name='Validation' + str(epoch), model_name=name)
 
             try:
                 os.mkdir(dir_checkpoint)
@@ -110,7 +109,7 @@ def train_net(model: UNet3D,
             except OSError:
                 pass
             torch.save(model.state_dict(),
-                       dir_checkpoint + f'CP_epoch{epoch + 1}.pth')
+                       dir_checkpoint + f'{name}_epoch{epoch + 1}.pth')
             logging.info(f'Epoch: {epoch + 1} Loss: {epoch_loss}')
             logging.info(f'Checkpoint {epoch + 1} saved !')
 
@@ -120,7 +119,7 @@ def train_net(model: UNet3D,
 def get_args():
     parser = argparse.ArgumentParser(description='Train the UNet on images and target masks',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-e', '--epochs', metavar='E', type=int, default=1,
+    parser.add_argument('-e', '--epochs', metavar='E', type=int, default=5,
                         help='Number of epochs', dest='epochs')
     parser.add_argument('-b', '--batch-size', metavar='B', type=int, nargs='?', default=1,
                         help='Batch size', dest='batchsize')
@@ -128,7 +127,9 @@ def get_args():
                         help='Learning rate', dest='lr')
     parser.add_argument('-f', '--load', dest='load', type=str, default=False,
                         help='Load model from a .pth file')
-    parser.add_argument('-v', '--validation', dest='val', type=float, default=4.0,
+    parser.add_argument('-n', '--name', dest='name', type=str, default='U-Net',
+                        help='Prefix name to be used in output files')
+    parser.add_argument('-v', '--validation', dest='val', type=float, default=1.0,
                         help='Percent of the data that is used as validation (0-100)')
 
     return parser.parse_args()
@@ -140,12 +141,6 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logging.info(f'Using device {device}')
 
-    # Change here to adapt to your data
-    # n_channels=3 for RGB images
-    # n_classes is the number of probabilities you want to get per pixel
-    #   - For 1 class and background, use n_classes=1
-    #   - For 2 classes, use n_classes=1
-    #   - For N > 2 classes, use n_classes=N
     input_channels = 1
     output_channels = 2
     net = UNet3D(in_channels=input_channels, out_channels=output_channels)
@@ -167,7 +162,8 @@ if __name__ == '__main__':
                   batch_size=args.batchsize,
                   learning_rate=args.lr,
                   device=device,
-                  val_percent=args.val / 100)
+                  val_percent=args.val / 100,
+                  name=args.name)
     except KeyboardInterrupt:
         torch.save(net.state_dict(), 'INTERRUPTED.pth')
         logging.info('Saved interrupt')

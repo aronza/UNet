@@ -13,7 +13,6 @@ from dataset.slicer import build_slices
 from unet3d.model import UNet3D
 
 
-# TODO: PREDICT AND PIECE TOGETHER AN IMAGE
 def predict_img(model, patch):
     model.eval()
 
@@ -93,13 +92,14 @@ if __name__ == "__main__":
         for idx, batch in enumerate(loader):
             logging.info(f'Batch {idx} Slice: {slices[idx]}')
 
-            result = predict_img(model=net, patch=batch, out_threshold=args.mask_threshold)
+            result = predict_img(model=net, patch=batch)
             result_img[slices[idx]] = result
 
         out_fn = out_files[i]
 
         mask_pixels = np.count_nonzero(result_img)
         mask_percentage = (mask_pixels * 100) / result_img.size
+
         logging.info(f'Result Mask percentage {mask_percentage}')
 
         nib.save(nib.Nifti1Image(result_img, nib_img.affine), join(args.output, out_fn))

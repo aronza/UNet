@@ -1,4 +1,5 @@
 import logging
+import timeit
 
 import torch
 
@@ -13,7 +14,7 @@ def validate(model, val_loader, loss_fnc, eval_criterion):
 
     with torch.no_grad():
         for i, batch in enumerate(val_loader):
-            logging.info(f'Validation iteration {i}')
+            start_time = timeit.default_timer()
 
             img = batch['image']
             mask = batch['mask']
@@ -32,7 +33,9 @@ def validate(model, val_loader, loss_fnc, eval_criterion):
                 output = model.final_activation(output)
 
             eval_score = eval_criterion(output, mask)
-            logging.info(f'I: {i}, Validation Score: {eval_score}')
+
+            elapsed = timeit.default_timer() - start_time
+            logging.info(f'I: {i}, Validation Score: {eval_score} in {elapsed} seconds')
 
             val_scores.update(eval_score.item(), img.shape[0])
 

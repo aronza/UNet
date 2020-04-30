@@ -9,6 +9,9 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, Subset, DataLoader
 
 from .slicer import build_slices
+from .transforms import ElasticDeformation
+
+GLOBAL_RANDOM_STATE = np.random.RandomState(47)
 
 
 def get_nii_files(directory, tag):
@@ -41,7 +44,7 @@ def calculate_stats(images):
     flat = np.concatenate(
         [img for img in images]
     )
-    return np.mean(flat), np.std(flat)
+    return np.mean(flat), np.std(flat), (np.count_nonzero(flat) * 100.0) / flat.size
 
 
 def expand_file_indices(files, num_slices):
@@ -56,17 +59,14 @@ class BasicDataset(Dataset):
 
         logging.info(f'Input shape: {self.img_files[0].shape}')
 
-        # self.mean, self.std = calculate_stats(self.img_files)
+        self.mean, self.std, percentage = calculate_stats(self.mask_files)
+
+        logging.info(f'Mask percentage {percentage}')
 
         self.slices = build_slices(self.img_files[0].shape)
 
-        num_img_files = len(self.img_files)
-        num_mask_files = len(self.mask_files)
-        assert num_img_files == num_mask_files, \
-            "There must be equal number of Images and Masks " + str(num_img_files) + " vs " + str(num_mask_files)
-
         logging.info(f'Creating dataset with {len(self.tags)} examples and {len(self.slices)} slices each')
-        self.length = num_img_files * len(self.slices)
+        self.length = len(self.tags) * len(self.slices)
         self.device = device
 
     def split_to_loaders(self, validation_ratio, test_ratio, batch_size):
@@ -96,9 +96,13 @@ class BasicDataset(Dataset):
         return self.length
 
     @classmethod
-    def pre_process(cls, img_nd, is_label, device):
+    def pre_process(cls, img_nd, is_label, device, random_state=None):
         if not is_label:
             img_nd = np.expand_dims(img_nd, axis=0)
+
+        if random_state is not None:
+            transform = ElasticDeformation(random_state, spline_order=0 if is_label else 3)
+            img_nd = transform(img_nd)
 
         img_nd = torch.from_numpy(img_nd)
 
@@ -116,7 +120,8 @@ class BasicDataset(Dataset):
         img = self.img_files[file_idx][_slice]
         mask = self.mask_files[file_idx][_slice]
 
-        img = self.pre_process(img, is_label=False, device=self.device)
-        mask = self.pre_process(mask, is_label=True, device=self.device)
+        state = np.random.RandomState(GLOBAL_RANDOM_STATE.randint(10000000))
+        img = self.pre_process(img, is_label=False, device=self.device, random_state=state)
+        mask = self.pre_process(mask, is_label=True, device=self.device, random_state=state)
 
         return {'image': img, 'mask': mask}
