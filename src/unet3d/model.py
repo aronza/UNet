@@ -3,9 +3,13 @@ import torch.nn as nn
 from .buildingblocks import Encoder, Decoder, DoubleConv
 
 
-class Abstract3DUNet(nn.Module):
+class UNet3D(nn.Module):
     """
-    Base class for standard and residual UNet.
+    3DUnet model from
+    `"3D U-Net: Learning Dense Volumetric Segmentation from Sparse Annotation"
+        <https://arxiv.org/pdf/1606.06650.pdf>`.
+
+    Uses `DoubleConv` as a basic_module and nearest neighbor upsampling in the decoder
 
     Args:
         in_channels (int): number of input channels
@@ -36,12 +40,15 @@ class Abstract3DUNet(nn.Module):
         conv_kernel_size (int or tuple): size of the convolving kernel in the basic_module
         pool_kernel_size (int or tuple): the size of the window
         conv_padding (int or tuple): add zero-padding added to all three sides of the input
+
+         def __init__(self, in_channels, out_channels, final_sigmoid=True, f_maps=64, layer_order='gcr',
+                 num_groups=8, num_levels=4, is_segmentation=True, conv_padding=1, **kwargs):
     """
 
-    def __init__(self, in_channels, out_channels, final_sigmoid, basic_module, f_maps=64, layer_order='gcr',
-                 num_groups=8, num_levels=4, is_segmentation=True, testing=False,
-                 conv_kernel_size=3, pool_kernel_size=2, conv_padding=1, **kwargs):
-        super(Abstract3DUNet, self).__init__()
+    def __init__(self, in_channels, out_channels, final_sigmoid=True, f_maps=64,
+                 layer_order='gcr', num_groups=8, num_levels=4, testing=False,
+                 conv_kernel_size=3, conv_padding=1, pool_kernel_size=2, **kwargs):
+        super(UNet3D, self).__init__()
 
         self.testing = testing
 
@@ -54,14 +61,14 @@ class Abstract3DUNet(nn.Module):
             if i == 0:
                 encoder = Encoder(in_channels, out_feature_num,
                                   apply_pooling=False,  # skip pooling in the firs encoder
-                                  basic_module=basic_module,
+                                  basic_module=DoubleConv,
                                   conv_layer_order=layer_order,
                                   conv_kernel_size=conv_kernel_size,
                                   num_groups=num_groups,
                                   padding=conv_padding)
             else:
                 encoder = Encoder(f_maps[i - 1], out_feature_num,
-                                  basic_module=basic_module,
+                                  basic_module=DoubleConv,
                                   conv_layer_order=layer_order,
                                   conv_kernel_size=conv_kernel_size,
                                   num_groups=num_groups,
@@ -76,15 +83,12 @@ class Abstract3DUNet(nn.Module):
         decoders = []
         reversed_f_maps = list(reversed(f_maps))
         for i in range(len(reversed_f_maps) - 1):
-            if basic_module == DoubleConv:
-                in_feature_num = reversed_f_maps[i] + reversed_f_maps[i + 1]
-            else:
-                in_feature_num = reversed_f_maps[i]
+            in_feature_num = reversed_f_maps[i] + reversed_f_maps[i + 1]
 
             out_feature_num = reversed_f_maps[i + 1]
             # currently strides with a constant stride: (2, 2, 2)
             decoder = Decoder(in_feature_num, out_feature_num,
-                              basic_module=basic_module,
+                              basic_module=DoubleConv,
                               conv_layer_order=layer_order,
                               conv_kernel_size=conv_kernel_size,
                               num_groups=num_groups,
@@ -97,15 +101,11 @@ class Abstract3DUNet(nn.Module):
         # channels to the number of labels
         self.final_conv = nn.Conv3d(f_maps[0], out_channels, 1)
 
-        if is_segmentation:
-            # semantic segmentation problem
-            if final_sigmoid:
-                self.final_activation = nn.Sigmoid()
-            else:
-                self.final_activation = nn.Softmax(dim=1)
+        # semantic segmentation problem
+        if final_sigmoid:
+            self.final_activation = nn.Sigmoid()
         else:
-            # regression problem
-            self.final_activation = None
+            self.final_activation = nn.Softmax(dim=1)
 
     def forward(self, x):
         # encoder part
@@ -133,23 +133,6 @@ class Abstract3DUNet(nn.Module):
             x = self.final_activation(x)
 
         return x
-
-
-class UNet3D(Abstract3DUNet):
-    """
-    3DUnet model from
-    `"3D U-Net: Learning Dense Volumetric Segmentation from Sparse Annotation"
-        <https://arxiv.org/pdf/1606.06650.pdf>`.
-
-    Uses `DoubleConv` as a basic_module and nearest neighbor upsampling in the decoder
-    """
-
-    def __init__(self, in_channels, out_channels, final_sigmoid=True, f_maps=64, layer_order='gcr',
-                 num_groups=8, num_levels=4, is_segmentation=True, conv_padding=1, **kwargs):
-        super(UNet3D, self).__init__(in_channels=in_channels, out_channels=out_channels, final_sigmoid=final_sigmoid,
-                                     basic_module=DoubleConv, f_maps=f_maps, layer_order=layer_order,
-                                     num_groups=num_groups, num_levels=num_levels, is_segmentation=is_segmentation,
-                                     conv_padding=conv_padding, **kwargs)
 
 
 def number_of_features_per_level(init_channel_number, num_levels):

@@ -2,8 +2,6 @@ import numpy as np
 from scipy.ndimage import gaussian_filter, map_coordinates
 
 
-# it's relatively slow, i.e. ~1s per patch of size 64x200x200, so use multiple workers in the DataLoader
-# remember to use spline_order=0 when transforming the labels
 class ElasticDeformation:
     """
     Apply elasitc deformations of 3D patches on a per-voxel mesh. Assumes ZYX axis order (or CZYX if the data is 4D).

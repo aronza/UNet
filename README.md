@@ -3,8 +3,6 @@
 
 #       Instructions
 
-    All scripts are inside src folder.
-
     To train on your data change the three folder paths on top of train.py to point at directory of training images,
     directory of label images and the directory to save the checkpoints of the model state.directory. Then you can
     start the training by running the train.py script. You can also control some of the hyperparameters by passing

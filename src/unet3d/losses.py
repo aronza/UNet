@@ -2,7 +2,6 @@ import torch
 import torch.nn.functional as F
 from torch import nn as nn
 from torch.autograd import Variable
-from torch.nn import MSELoss, SmoothL1Loss, L1Loss
 
 from .utils import expand_as_one_hot
 
@@ -35,51 +34,6 @@ def compute_per_channel_dice(input, target, epsilon=1e-6, weight=None):
     # here we can use standard dice (input + target).sum(-1) or extension (see V-Net) (input^2 + target^2).sum(-1)
     denominator = (input * input).sum(-1) + (target * target).sum(-1)
     return 2 * (intersect / denominator.clamp(min=epsilon))
-
-
-class _MaskingLossWrapper(nn.Module):
-    """
-    Loss wrapper which prevents the gradient of the loss to be computed where target is equal to `ignore_index`.
-    """
-
-    def __init__(self, loss, ignore_index):
-        super(_MaskingLossWrapper, self).__init__()
-        assert ignore_index is not None, 'ignore_index cannot be None'
-        self.loss = loss
-        self.ignore_index = ignore_index
-
-    def forward(self, input, target):
-        mask = target.clone().ne_(self.ignore_index)
-        mask.requires_grad = False
-
-        # mask out input/target so that the gradient is zero where on the mask
-        input = input * mask
-        target = target * mask
-
-        # forward masked input and target to the loss
-        return self.loss(input, target)
-
-
-class SkipLastTargetChannelWrapper(nn.Module):
-    """
-    Loss wrapper which removes additional target channel
-    """
-
-    def __init__(self, loss, squeeze_channel=False):
-        super(SkipLastTargetChannelWrapper, self).__init__()
-        self.loss = loss
-        self.squeeze_channel = squeeze_channel
-
-    def forward(self, input, target):
-        assert target.size(1) > 1, 'Target tensor has a singleton channel dimension, cannot remove channel'
-
-        # skips last target channel if needed
-        target = target[:, :-1, ...]
-
-        if self.squeeze_channel:
-            # squeeze channel dimension if singleton
-            target = torch.squeeze(target, dim=1)
-        return self.loss(input, target)
 
 
 class _AbstractDiceLoss(nn.Module):
@@ -234,26 +188,6 @@ class PixelWiseCrossEntropyLoss(nn.Module):
         return result.mean()
 
 
-class TagsAngularLoss(nn.Module):
-    def __init__(self, tags_coefficients):
-        super(TagsAngularLoss, self).__init__()
-        self.tags_coefficients = tags_coefficients
-
-    def forward(self, inputs, targets, weight):
-        assert isinstance(inputs, list)
-        # if there is just one output head the 'inputs' is going to be a singleton list [tensor]
-        # and 'targets' is just going to be a tensor (that's how the HDF5Dataloader works)
-        # so wrap targets in a list in this case
-        if len(inputs) == 1:
-            targets = [targets]
-        assert len(inputs) == len(targets) == len(self.tags_coefficients)
-        loss = 0
-        for input, target, alpha in zip(inputs, targets, self.tags_coefficients):
-            loss += alpha * square_angular_loss(input, target, weight)
-
-        return loss
-
-
 class WeightedSmoothL1Loss(nn.SmoothL1Loss):
     def __init__(self, threshold, initial_weight, apply_below_threshold=True):
         super().__init__(reduction="none")
@@ -313,81 +247,6 @@ def flatten(tensor):
     return transposed.contiguous().view(C, -1)
 
 
-def get_loss_criterion(config):
-    """
-    Returns the loss function based on provided configuration
-    :param config: (dict) a top level configuration object containing the 'loss' key
-    :return: an instance of the loss function
-    """
-    assert 'loss' in config, 'Could not find loss function configuration'
-    loss_config = config['loss']
-    name = loss_config.pop('name')
-
-    ignore_index = loss_config.pop('ignore_index', None)
-    skip_last_target = loss_config.pop('skip_last_target', False)
-    weight = loss_config.pop('weight', None)
-
-    if weight is not None:
-        # convert to cuda tensor if necessary
-        weight = torch.tensor(weight).to(config['device'])
-
-    pos_weight = loss_config.pop('pos_weight', None)
-    if pos_weight is not None:
-        # convert to cuda tensor if necessary
-        pos_weight = torch.tensor(pos_weight).to(config['device'])
-
-    loss = _create_loss(name, loss_config, weight, ignore_index, pos_weight)
-
-    if not (ignore_index is None or name in ['CrossEntropyLoss', 'WeightedCrossEntropyLoss']):
-        # use MaskingLossWrapper only for non-cross-entropy losses, since CE losses allow specifying 'ignore_index' directly
-        loss = _MaskingLossWrapper(loss, ignore_index)
-
-    if skip_last_target:
-        loss = SkipLastTargetChannelWrapper(loss, loss_config.get('squeeze_channel', False))
-
-    return loss
 
 
-SUPPORTED_LOSSES = ['BCEWithLogitsLoss', 'BCEDiceLoss', 'CrossEntropyLoss', 'WeightedCrossEntropyLoss',
-                    'PixelWiseCrossEntropyLoss', 'GeneralizedDiceLoss', 'DiceLoss', 'TagsAngularLoss', 'MSELoss',
-                    'SmoothL1Loss', 'L1Loss', 'WeightedSmoothL1Loss']
-
-
-def _create_loss(name, loss_config, weight, ignore_index, pos_weight):
-    if name == 'BCEWithLogitsLoss':
-        return nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-    elif name == 'BCEDiceLoss':
-        alpha = loss_config.get('alphs', 1.)
-        beta = loss_config.get('beta', 1.)
-        return BCEDiceLoss(alpha, beta)
-    elif name == 'CrossEntropyLoss':
-        if ignore_index is None:
-            ignore_index = -100  # use the default 'ignore_index' as defined in the CrossEntropyLoss
-        return nn.CrossEntropyLoss(weight=weight, ignore_index=ignore_index)
-    elif name == 'WeightedCrossEntropyLoss':
-        if ignore_index is None:
-            ignore_index = -100  # use the default 'ignore_index' as defined in the CrossEntropyLoss
-        return WeightedCrossEntropyLoss(ignore_index=ignore_index)
-    elif name == 'PixelWiseCrossEntropyLoss':
-        return PixelWiseCrossEntropyLoss(class_weights=weight, ignore_index=ignore_index)
-    elif name == 'GeneralizedDiceLoss':
-        sigmoid_normalization = loss_config.get('sigmoid_normalization', True)
-        return GeneralizedDiceLoss(sigmoid_normalization=sigmoid_normalization)
-    elif name == 'DiceLoss':
-        sigmoid_normalization = loss_config.get('sigmoid_normalization', True)
-        return DiceLoss(weight=weight, sigmoid_normalization=sigmoid_normalization)
-    elif name == 'TagsAngularLoss':
-        tags_coefficients = loss_config['tags_coefficients']
-        return TagsAngularLoss(tags_coefficients)
-    elif name == 'MSELoss':
-        return MSELoss()
-    elif name == 'SmoothL1Loss':
-        return SmoothL1Loss()
-    elif name == 'L1Loss':
-        return L1Loss()
-    elif name == 'WeightedSmoothL1Loss':
-        return WeightedSmoothL1Loss(threshold=loss_config['threshold'], initial_weight=loss_config['initial_weight'],
-                                    apply_below_threshold=loss_config.get('apply_below_threshold', True))
-    else:
-        raise RuntimeError(f"Unsupported loss function: '{name}'. Supported losses: {SUPPORTED_LOSSES}")
 
