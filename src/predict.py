@@ -1,7 +1,7 @@
 import argparse
 import logging
 from os import listdir
-from os.path import splitext, join
+from os.path import join
 
 import nibabel as nib
 import numpy as np
@@ -41,21 +41,8 @@ def get_args():
                         help='directory of input images', required=True)
     parser.add_argument('--output', '-o', metavar='OUTPUT',
                         help='directory of output files', required=True)
-    parser.add_argument('--mask-threshold', '-t', type=float,
-                        help="Minimum probability value to consider a mask pixel white",
-                        default=0.5)
 
     return parser.parse_args()
-
-
-def get_output_filenames(input_files):
-    output_files = []
-
-    for f in input_files:
-        pathsplit = splitext(f)
-        output_files.append("{}_OUT{}".format(pathsplit[0], pathsplit[1]))
-
-    return output_files
 
 
 if __name__ == "__main__":
@@ -83,6 +70,7 @@ if __name__ == "__main__":
         nib_img = nib.load(join(args.input, fn))
         img = nib_img.dataobj
         result_img = np.zeros(img.shape)
+
         slices = build_slices(img.shape)
 
         data_set = [BasicDataset.pre_process(img[patch], is_label=False, device=device) for patch in slices]

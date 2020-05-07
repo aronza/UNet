@@ -69,7 +69,7 @@ class BasicDataset(Dataset):
         self.length = len(self.tags) * len(self.slices)
         self.device = device
 
-    def split_to_loaders(self, validation_ratio, test_ratio, batch_size):
+    def split_to_loaders(self, validation_ratio, test_ratio, batch_size=1, test_files=None):
         """
         Splits the data set into training, validation and testing based on the given ratios and returns
         data loaders pointing to these subsets.
@@ -77,9 +77,14 @@ class BasicDataset(Dataset):
         :param validation_ratio: Percentages of whole data set to be used for validation
         :param test_ratio: Percentages of whole data set to be used for testing
         :param batch_size: Batch size for the data loader
+        :param test_files: Use given files as test.
+
         :return: List of torch.utils.data.DataLoader in order of training, validation and testing.
         """
-        train_files, test_files = train_test_split(range(len(self.img_files)), test_size=test_ratio)
+        if test_files is None:
+            train_files, test_files = train_test_split(range(len(self.img_files)), test_size=test_ratio)
+        else:
+            train_files = [i for i in range(len(self.img_files)) if i not in test_files]
         val_train_ratio = validation_ratio / (1 - test_ratio)
         train_files, validation_files = train_test_split(train_files, test_size=val_train_ratio)
 
@@ -101,7 +106,7 @@ class BasicDataset(Dataset):
             img_nd = np.expand_dims(img_nd, axis=0)
 
         if random_state is not None:
-            transform = ElasticDeformation(random_state, spline_order=0 if is_label else 3)
+            transform = ElasticDeformation(random_state, spline_order=0 if is_label else 3, execution_probability=1)
             img_nd = transform(img_nd)
 
         img_nd = torch.from_numpy(img_nd)
@@ -120,8 +125,8 @@ class BasicDataset(Dataset):
         img = self.img_files[file_idx][_slice]
         mask = self.mask_files[file_idx][_slice]
 
-        state = np.random.RandomState(GLOBAL_RANDOM_STATE.randint(10000000))
-        img = self.pre_process(img, is_label=False, device=self.device, random_state=state)
-        mask = self.pre_process(mask, is_label=True, device=self.device, random_state=state)
+        # state = np.random.RandomState(GLOBAL_RANDOM_STATE.randint(10000000))
+        img = self.pre_process(img, is_label=False, device=self.device, random_state=None)
+        mask = self.pre_process(mask, is_label=True, device=self.device, random_state=None)
 
         return {'image': img, 'mask': mask}

@@ -13,10 +13,16 @@ def compute_per_channel_dice(input, target, epsilon=1e-6, weight=None):
 
     Args:
          input (torch.Tensor): NxCxSpatial input tensor
-         target (torch.Tensor): NxCxSpatial target tensor
+         target (torch.Tensor): NxSpatial target tensor
          epsilon (float): prevents division by zero
          weight (torch.Tensor): Cx1 tensor of weight per channel/class
     """
+    assert input.dim() == 5
+
+    n_classes = input.size()[1]
+
+    if target.dim() == 4:
+        target = expand_as_one_hot(target, C=n_classes)
 
     # input and target shapes must match
     assert input.size() == target.size(), "'input' " + str(input.size()) + " and 'target' " + str(

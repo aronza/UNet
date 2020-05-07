@@ -8,7 +8,6 @@ from datetime import datetime
 import matplotlib as mpl
 import torch
 from torch import optim
-from torch.nn import CrossEntropyLoss
 from torch.utils.tensorboard import SummaryWriter
 
 mpl.use('Agg')
@@ -18,6 +17,7 @@ import matplotlib.pyplot as plt
 from dataset.dataset import BasicDataset
 from eval import validate
 from unet3d.metrics import MeanIoU
+from unet3d.losses import DiceLoss
 from unet3d.model import UNet3D
 
 dir_img = '/data/h_oguz_lab/larsonke/Raw/Training-Data/T1/'
@@ -31,22 +31,24 @@ def plot_cost(costs, name, model_name):
     plt.xlabel("Iterations")
     plt.ylabel(name)
     plt.plot(range(len(costs)), costs, color='red')  # cost line
-    plt.savefig('runs/' + model_name + str(datetime.now()) + '_' + name + '_overtime.png')
+    plt.savefig('train_output/' + model_name + str(datetime.now()) + '_' + name + '_overtime.png')
 
 
 def train_net(model: UNet3D,
               device,
-              loss_fnc=CrossEntropyLoss(),
+              loss_fnc=DiceLoss(sigmoid_normalization=False),
               eval_criterion=MeanIoU(),
               epochs=5,
               batch_size=1,
               learning_rate=0.0002,
-              val_percent=0.01,
+              val_percent=0.04,
               test_percent=0.1,
               name='U-Net',
-              save_cp=True):
+              save_cp=True,
+              tests=None):
     data_set = BasicDataset(dir_img, dir_mask, 'T1', device)
-    train_loader, val_loader, test_loader = data_set.split_to_loaders(val_percent, test_percent, batch_size)
+    train_loader, val_loader, test_loader = data_set.split_to_loaders(val_percent, test_percent, batch_size,
+                                                                      test_files=tests)
 
     writer = SummaryWriter(comment=f'LR_{learning_rate}_BS_{batch_size}')
     global_step = 0
@@ -100,9 +102,6 @@ def train_net(model: UNet3D,
                 writer.add_scalar('Validation/test', val_score, global_step)
 
         if save_cp:
-            plot_cost(losses, name='Loss' + str(epoch), model_name=name)
-            plot_cost(val_scores, name='Validation' + str(epoch), model_name=name)
-
             try:
                 os.mkdir(dir_checkpoint)
                 logging.info('Created checkpoint directory')
@@ -112,6 +111,8 @@ def train_net(model: UNet3D,
                        dir_checkpoint + f'{name}_epoch{epoch + 1}.pth')
             logging.info(f'Epoch: {epoch + 1} Loss: {epoch_loss}')
             logging.info(f'Checkpoint {epoch + 1} saved !')
+            plot_cost(losses, name='Loss' + str(epoch), model_name=name)
+            plot_cost(val_scores, name='Validation' + str(epoch), model_name=name)
 
     writer.close()
 
@@ -129,9 +130,10 @@ def get_args():
                         help='Load model from a .pth file')
     parser.add_argument('-n', '--name', dest='name', type=str, default='U-Net',
                         help='Prefix name to be used in output files')
-    parser.add_argument('-v', '--validation', dest='val', type=float, default=1.0,
+    parser.add_argument('-v', '--validation', dest='val', type=float, default=4.0,
                         help='Percent of the data that is used as validation (0-100)')
-
+    parser.add_argument('-t', '--tests', dest='tests', nargs='+', default=None,
+                        help='Files to use as test cases')
     return parser.parse_args()
 
 
@@ -163,7 +165,8 @@ if __name__ == '__main__':
                   learning_rate=args.lr,
                   device=device,
                   val_percent=args.val / 100,
-                  name=args.name)
+                  name=args.name,
+                  tests=args.tests)
     except KeyboardInterrupt:
         torch.save(net.state_dict(), 'INTERRUPTED.pth')
         logging.info('Saved interrupt')
